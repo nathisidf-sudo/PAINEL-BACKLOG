@@ -148,7 +148,7 @@
     <div class="canvas-wrap"><canvas id="chartErros"></canvas></div>
   </div>
   <div class="chart-card">
-    <h3>Pedidos por Grupo <span style="font-weight:400;color:#9ca3af;">(de-para com Backlog Total)</span></h3>
+    <h3>Pedidos Únicos por Grupo <span style="font-weight:400;color:#9ca3af;">(de-para com Backlog Total)</span></h3>
     <div class="canvas-wrap"><canvas id="chartGrupo"></canvas></div>
   </div>
   <div class="chart-card wide">
@@ -294,6 +294,18 @@ function countBy(arr, key) {
   return m;
 }
 
+function countUniqueBy(arr, groupKey, uniqueKey) {
+  const sets = {};
+  arr.forEach(o => {
+    const k = o[groupKey] || 'SEM STATUS';
+    if (!sets[k]) sets[k] = new Set();
+    sets[k].add(o[uniqueKey]);
+  });
+  const m = {};
+  Object.keys(sets).forEach(k => { m[k] = sets[k].size; });
+  return m;
+}
+
 function makeBarChart(id, labels, datasets, horizontal, stacked) {
   if (charts[id]) charts[id].destroy();
   charts[id] = new Chart(document.getElementById(id), {
@@ -361,7 +373,7 @@ function render() {
   const reasonEntries = Object.entries(EXTRAS.erros.reasons).sort((a,b)=>b[1]-a[1]).slice(0,8);
   makeBarChart('chartErros', reasonEntries.map(e=>e[0]), [{ data: reasonEntries.map(e=>e[1]), backgroundColor: '#e0653d', borderRadius: 4 }], true, false);
 
-  const grupoCounts = countBy(filtered, 'GRUPO');
+  const grupoCounts = countUniqueBy(filtered, 'GRUPO', 'PEDIDO');
   const grupoLabels = Object.keys(grupoCounts).sort((a,b)=>grupoCounts[b]-grupoCounts[a]);
   makeBarChart('chartGrupo', grupoLabels, [{ data: grupoLabels.map(l=>grupoCounts[l]), backgroundColor: grupoLabels.map(l=> l.startsWith('Sem Grupo') ? '#d1d5db' : PALETTE[grupoLabels.indexOf(l) % PALETTE.length]), borderRadius: 4 }], true, false);
 
