@@ -199,15 +199,15 @@ function createMultiSelect(id, values, label) {
   const button = container.querySelector('.ms-button');
   const panel = container.querySelector('.ms-panel');
 
-  panel.innerHTML = `<div class="ms-actions"><a data-act="all">Selecionar todos</a><a data-act="none">Limpar</a></div>` +
-    values.map(v => `<label><input type="checkbox" value="${escHtml(v)}"> ${escHtml(v)}</label>`).join('');
+  panel.innerHTML = '<div class="ms-actions"><a data-act="all">Selecionar todos</a><a data-act="none">Limpar</a></div>' +
+    values.map(v => '<label><input type="checkbox" value="' + escHtml(v) + '"> ' + escHtml(v) + '</label>').join('');
 
   const state = new Set();
 
   function updateButtonLabel() {
     if (state.size === 0) button.innerHTML = label;
-    else if (state.size === 1) button.innerHTML = `${escHtml([...state][0])}`;
-    else button.innerHTML = `${label} <span class="ms-count">${state.size}</span>`;
+    else if (state.size === 1) button.innerHTML = escHtml([...state][0]);
+    else button.innerHTML = label + ' <span class="ms-count">' + state.size + '</span>';
   }
 
   button.addEventListener('click', (e) => {
@@ -342,12 +342,10 @@ function render() {
   `;
   document.getElementById('kpis').innerHTML = kpiHtml;
 
-  // Status chart
   const statusCounts = countBy(filtered, 'STATUS');
   const statusLabels = Object.keys(statusCounts).sort((a,b)=>statusCounts[b]-statusCounts[a]);
   makeBarChart('chartStatus', statusLabels, [{ data: statusLabels.map(l=>statusCounts[l]), backgroundColor: statusLabels.map(l=>STATUS_COLORS[l]||'#9ca3af'), borderRadius: 4 }], true, false);
 
-  // SSA vs IOS by status (stacked)
   const allStatus = uniqueSorted(RAW_DATA.map(o=>o.STATUS));
   const ssaCounts = countBy(filtered.filter(o=>o.SISTEMA==='SSA'), 'STATUS');
   const iosCounts = countBy(filtered.filter(o=>o.SISTEMA==='IOS'), 'STATUS');
@@ -356,14 +354,76 @@ function render() {
     { label: 'IOS', data: allStatus.map(s=>iosCounts[s]||0), backgroundColor: '#22b8b0', borderRadius: 4 }
   ], false, true);
 
-  // Tipo chart
   const tipoCounts = countBy(filtered, 'TIPO');
   const tipoLabels = Object.keys(tipoCounts).sort((a,b)=>tipoCounts[b]-tipoCounts[a]);
   makeBarChart('chartTipo', tipoLabels, [{ data: tipoLabels.map(l=>tipoCounts[l]), backgroundColor: PALETTE, borderRadius: 4 }], false, false);
 
-  // Erros chart (static, from extras)
   const reasonEntries = Object.entries(EXTRAS.erros.reasons).sort((a,b)=>b[1]-a[1]).slice(0,8);
   makeBarChart('chartErros', reasonEntries.map(e=>e[0]), [{ data: reasonEntries.map(e=>e[1]), backgroundColor: '#e0653d', borderRadius: 4 }], true, false);
 
-  // Grupo chart (de-para com Backlog Total; cobertura parcial)
-  const g
+  const grupoCounts = countBy(filtered, 'GRUPO');
+  const grupoLabels = Object.keys(grupoCounts).sort((a,b)=>grupoCounts[b]-grupoCounts[a]);
+  makeBarChart('chartGrupo', grupoLabels, [{ data: grupoLabels.map(l=>grupoCounts[l]), backgroundColor: grupoLabels.map(l=> l.startsWith('Sem Grupo') ? '#d1d5db' : PALETTE[grupoLabels.indexOf(l) % PALETTE.length]), borderRadius: 4 }], true, false);
+
+  const meses = uniqueSorted(filtered.map(o=>o.MES));
+  const countByMes = {}; const valorByMes = {};
+  meses.forEach(m => { countByMes[m]=0; valorByMes[m]=0; });
+  filtered.forEach(o => { countByMes[o.MES] = (countByMes[o.MES]||0)+1; valorByMes[o.MES] = (valorByMes[o.MES]||0) + (o.VALOR||0); });
+  makeLineChart('chartEvolucao', meses, [{ label: 'Pedidos', data: meses.map(m=>countByMes[m]), borderColor:'#4f7cff', backgroundColor:'rgba(79,124,255,0.15)', fill:true, tension:0.25 }]);
+  makeLineChart('chartEvolucaoValor', meses, [{ label: 'Valor (R$)', data: meses.map(m=>valorByMes[m]), borderColor:'#1e8e5a', backgroundColor:'rgba(30,142,90,0.15)', fill:true, tension:0.25 }]);
+
+  const rows = filtered
+    .sort((a,b)=> b.DATA.localeCompare(a.DATA))
+    .slice(0, 5000)
+    .map(o => [o.DATA, o.PEDIDO, o.SISTEMA, o.TIPO, o.STATUS, o.GRUPO||'', o.OBS||'', fmtBRL(o.VALOR)]);
+
+  if (gridInstance) {
+    gridInstance.updateConfig({ data: rows }).forceRender();
+  } else {
+    gridInstance = new gridjs.Grid({
+      columns: ['Data','Pedido','Sistema','Tipo','Status','Grupo','Obs','Valor'],
+      data: rows,
+      search: false,
+      sort: true,
+      pagination: { limit: 15 },
+      style: { table: { 'white-space': 'nowrap' } }
+    }).render(document.getElementById('grid'));
+  }
+}
+
+function renderAtrasoGrid() {
+  const rows = EXTRAS.atrasos_24h.map(a => [
+    a.PEDIDO, a['DATA ENTREGUE']||'', a['HORA ENTREGUE']||'', a['DATA CONCLUIDO ']||'', a['HORA CONCLUIDO']||'', a.TEMPO||'', a.MOTIVO||''
+  ]);
+  gridAtrasoInstance = new gridjs.Grid({
+    columns: ['Pedido','Data Entregue','Hora Entregue','Data Concluído','Hora Concluído','Tempo Total','Motivo'],
+    data: rows,
+    sort: true,
+    pagination: { limit: 10 },
+    style: { table: { 'white-space': 'nowrap' } }
+  }).render(document.getElementById('gridAtraso'));
+}
+
+createMultiSelect('f-sistema', ['SSA','IOS'], 'Todos (SSA + IOS)');
+createMultiSelect('f-status', uniqueSorted(RAW_DATA.map(o=>o.STATUS)), 'Todos');
+createMultiSelect('f-tipo', uniqueSorted(RAW_DATA.map(o=>o.TIPO)), 'Todos');
+createMultiSelect('f-grupo', uniqueSorted(RAW_DATA.map(o=>o.GRUPO)), 'Todos');
+
+['f-data-ini','f-data-fim'].forEach(id => document.getElementById(id).addEventListener('change', applyFilters));
+document.getElementById('f-search').addEventListener('input', applyFilters);
+document.getElementById('f-clear').addEventListener('click', () => {
+  ['f-sistema','f-status','f-tipo','f-grupo'].forEach(id => multiSelects[id].clear());
+  document.getElementById('f-data-ini').value='';
+  document.getElementById('f-data-fim').value='';
+  document.getElementById('f-search').value='';
+  applyFilters();
+});
+
+const datas = RAW_DATA.map(o=>o.DATA).sort();
+const grupoMatched = RAW_DATA.filter(o=>!o.GRUPO.startsWith('Sem Grupo')).length;
+document.getElementById('subtitle').textContent = `${RAW_DATA.length} registros de atendimento (SSA + IOS) · período ${datas[0]} a ${datas[datas.length-1]} · fonte: "CONTROLE DE PEDIDOS LOGÍSTICA - Copiar.xlsx" · Grupo (de-para c/ Backlog Total): ${grupoMatched} registros com correspondência (${Math.round(grupoMatched/RAW_DATA.length*100)}%)`;
+renderAtrasoGrid();
+render();
+</script>
+</body>
+</html>
