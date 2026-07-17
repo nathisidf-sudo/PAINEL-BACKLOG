@@ -636,21 +636,21 @@ function renderDailyGroupTab() {
   const dataSel = data.filter(o => diasSel.has(o.DATA));
   const grupos = uniqueSorted(dataSel.map(o=>o.GRUPO));
 
-  const volDatasets = dias.map((d,i) => ({
-    label: d,
-    data: grupos.map(g => dataSel.filter(o=>o.GRUPO===g && o.DATA===d).length),
-    backgroundColor: PALETTE[i % PALETTE.length],
+  const volDatasets = grupos.map((g,i) => ({
+    label: g,
+    data: dias.map(d => dataSel.filter(o=>o.GRUPO===g && o.DATA===d).length),
+    backgroundColor: g.startsWith('Sem Grupo') ? '#d1d5db' : PALETTE[i % PALETTE.length],
     borderRadius: 4
   }));
-  const valDatasets = dias.map((d,i) => ({
-    label: d,
-    data: grupos.map(g => dataSel.filter(o=>o.GRUPO===g && o.DATA===d).reduce((s,o)=>s+(o.VALOR||0),0)),
-    backgroundColor: PALETTE[i % PALETTE.length],
+  const valDatasets = grupos.map((g,i) => ({
+    label: g,
+    data: dias.map(d => dataSel.filter(o=>o.GRUPO===g && o.DATA===d).reduce((s,o)=>s+(o.VALOR||0),0)),
+    backgroundColor: g.startsWith('Sem Grupo') ? '#d1d5db' : PALETTE[i % PALETTE.length],
     borderRadius: 4
   }));
 
-  makeBarChart('chartDiaVolume', grupos, volDatasets, false, false, (v)=>fmtNum(v), true);
-  makeBarChart('chartDiaValor', grupos, valDatasets, false, false, (v)=>fmtBRL(v), true);
+  makeBarChart('chartDiaVolume', dias, volDatasets, false, false, (v)=>fmtNum(v), true);
+  makeBarChart('chartDiaValor', dias, valDatasets, false, false, (v)=>fmtBRL(v), true);
 }
 
 createMultiSelect('f-sistema', ['SSA','IOS'], 'Todos (SSA + IOS)');
