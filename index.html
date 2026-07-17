@@ -478,15 +478,46 @@ function countUniqueBy(arr, groupKey, uniqueKey) {
   return m;
 }
 
-function makeBarChart(id, labels, datasets, horizontal, stacked) {
+function makeBarChart(id, labels, datasets, horizontal, stacked, valueFormatter, forceLegend) {
   if (charts[id]) charts[id].destroy();
+  const plugins = [];
+  if (valueFormatter) {
+    plugins.push({
+      id: 'valueLabels_' + id,
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        chart.data.datasets.forEach((dataset, di) => {
+          const meta = chart.getDatasetMeta(di);
+          if (meta.hidden) return;
+          meta.data.forEach((bar, i) => {
+            const value = dataset.data[i];
+            if (value === undefined || value === null || value === 0) return;
+            const label = valueFormatter(value);
+            ctx.save();
+            ctx.fillStyle = '#374151';
+            ctx.font = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            const pos = bar.tooltipPosition ? bar.tooltipPosition() : { x: bar.x, y: bar.y };
+            const yPos = horizontal ? pos.y : pos.y - 4;
+            const xPos = horizontal ? pos.x + 4 : pos.x;
+            if (horizontal) { ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; }
+            ctx.fillText(label, xPos, yPos);
+            ctx.restore();
+          });
+        });
+      }
+    });
+  }
   charts[id] = new Chart(document.getElementById(id), {
     type: 'bar',
     data: { labels, datasets },
+    plugins: plugins,
     options: {
       responsive: true, maintainAspectRatio: false,
       indexAxis: horizontal ? 'y' : 'x',
-      plugins: { legend: { display: datasets.length > 1 } },
+      layout: { padding: { top: valueFormatter ? 16 : 0 } },
+      plugins: { legend: { display: forceLegend || datasets.length > 1 } },
       scales: {
         x: { stacked: !!stacked, grid: { display: false } },
         y: { stacked: !!stacked, grid: { display: false } }
@@ -618,8 +649,8 @@ function renderDailyGroupTab() {
     borderRadius: 4
   }));
 
-  makeBarChart('chartDiaVolume', grupos, volDatasets, false, false);
-  makeBarChart('chartDiaValor', grupos, valDatasets, false, false);
+  makeBarChart('chartDiaVolume', grupos, volDatasets, false, false, (v)=>fmtNum(v), true);
+  makeBarChart('chartDiaValor', grupos, valDatasets, false, false, (v)=>fmtBRL(v), true);
 }
 
 createMultiSelect('f-sistema', ['SSA','IOS'], 'Todos (SSA + IOS)');
