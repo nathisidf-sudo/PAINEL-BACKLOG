@@ -79,6 +79,18 @@
   .ms-panel .ms-actions { display: flex; gap: 6px; padding: 4px 6px 8px 6px; border-bottom: 1px solid #eceef1; margin-bottom: 4px; }
   .ms-panel .ms-actions a { font-size: 11px; color: #4f7cff; cursor: pointer; text-decoration: none; }
   .ms-panel .ms-actions a:hover { text-decoration: underline; }
+  .ms-panel.cal-panel { min-width: 240px; max-height: none; overflow: visible; }
+  .cal-header { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 8px 2px; }
+  .cal-header .cal-nav { border: none; background: #f5f6f8; cursor: pointer; font-size: 13px; color: #4f7cff; padding: 3px 9px; border-radius: 5px; }
+  .cal-header .cal-nav:hover { background: #eef1ff; }
+  .cal-header .cal-title { font-size: 12px; font-weight: 700; color: #374151; text-transform: capitalize; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-dow { font-size: 10px; color: #9ca3af; text-align: center; padding: 2px 0; font-weight: 600; }
+  .cal-day { font-size: 11px; text-align: center; padding: 6px 0; border-radius: 6px; cursor: default; color: #d1d5db; }
+  .cal-day.empty { visibility: hidden; }
+  .cal-day.available { cursor: pointer; color: #1f2430; }
+  .cal-day.available:hover { background: #f0f1f3; }
+  .cal-day.selected { background: #4f7cff; color: #fff; font-weight: 700; }
   .charts-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
   .charts-grid .wide { grid-column: span 2; }
   .charts-grid .full { grid-column: span 4; }
@@ -196,9 +208,9 @@
     <label>Grupo</label>
     <div class="multiselect" id="f2-grupo"><button type="button" class="ms-button">Todos</button><div class="ms-panel"></div></div>
   </div>
-  <div class="field" style="min-width:280px;">
+  <div class="field">
     <label>Dias para comparar</label>
-    <div class="multiselect" id="f2-dias"><button type="button" class="ms-button">Selecione dias</button><div class="ms-panel"></div></div>
+    <div class="multiselect" id="f2-dias"><button type="button" class="ms-button">Selecione dias</button><div class="ms-panel cal-panel"></div></div>
   </div>
   <button id="f2-clear">Limpar seleção</button>
 </div>
@@ -297,6 +309,98 @@ function createMultiSelect(id, values, label, preSelected) {
       state.clear();
       updateButtonLabel();
     }
+  };
+}
+
+// --- Calendar picker component (for choosing specific days) ---
+const MESES_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const DOW_PT = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+function createDateCalendar(id, availableDates, label, preSelected) {
+  preSelected = preSelected || [];
+  const container = document.getElementById(id);
+  const button = container.querySelector('.ms-button');
+  const panel = container.querySelector('.ms-panel');
+  const availSet = new Set(availableDates);
+  const state = new Set(preSelected);
+
+  let refDate = availableDates.length ? availableDates[availableDates.length - 1] : new Date().toISOString().slice(0,10);
+  let viewYear = parseInt(refDate.slice(0,4), 10);
+  let viewMonth = parseInt(refDate.slice(5,7), 10) - 1;
+
+  function updateButtonLabel() {
+    if (state.size === 0) button.innerHTML = label;
+    else if (state.size === 1) button.innerHTML = escHtml([...state][0]);
+    else button.innerHTML = label + ' <span class="ms-count">' + state.size + '</span>';
+  }
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function renderCalendar() {
+    const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+    let html = '<div class="ms-actions"><a data-act="all">Selecionar mês</a><a data-act="none">Limpar</a></div>';
+    html += '<div class="cal-header"><button type="button" class="cal-nav" data-nav="-1">‹</button>';
+    html += '<span class="cal-title">' + MESES_PT[viewMonth] + ' ' + viewYear + '</span>';
+    html += '<button type="button" class="cal-nav" data-nav="1">›</button></div>';
+    html += '<div class="cal-grid">';
+    DOW_PT.forEach(d => { html += '<div class="cal-dow">' + d + '</div>'; });
+    for (let i = 0; i < firstDow; i++) html += '<div class="cal-day empty"></div>';
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = viewYear + '-' + pad2(viewMonth + 1) + '-' + pad2(d);
+      const isAvail = availSet.has(dateStr);
+      const isSel = state.has(dateStr);
+      let cls = 'cal-day' + (isAvail ? ' available' : '') + (isSel ? ' selected' : '');
+      html += '<div class="' + cls + '" data-date="' + dateStr + '">' + d + '</div>';
+    }
+    html += '</div>';
+    panel.innerHTML = html;
+  }
+
+  panel.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (e.target.dataset && e.target.dataset.nav) {
+      viewMonth += parseInt(e.target.dataset.nav, 10);
+      if (viewMonth < 0) { viewMonth = 11; viewYear--; }
+      if (viewMonth > 11) { viewMonth = 0; viewYear++; }
+      renderCalendar();
+      return;
+    }
+    if (e.target.dataset && e.target.dataset.act) {
+      if (e.target.dataset.act === 'all') {
+        const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = viewYear + '-' + pad2(viewMonth + 1) + '-' + pad2(d);
+          if (availSet.has(dateStr)) state.add(dateStr);
+        }
+      } else {
+        state.clear();
+      }
+      updateButtonLabel();
+      renderCalendar();
+      onMultiSelectChange(id);
+      return;
+    }
+    if (e.target.dataset && e.target.dataset.date && e.target.classList.contains('available')) {
+      const dateStr = e.target.dataset.date;
+      if (state.has(dateStr)) state.delete(dateStr); else state.add(dateStr);
+      updateButtonLabel();
+      renderCalendar();
+      onMultiSelectChange(id);
+    }
+  });
+
+  button.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.ms-panel.open').forEach(p => { if (p !== panel) p.classList.remove('open'); });
+    panel.classList.toggle('open');
+  });
+
+  renderCalendar();
+  updateButtonLabel();
+  multiSelects[id] = {
+    getSelected: () => state,
+    clear: () => { state.clear(); updateButtonLabel(); renderCalendar(); }
   };
 }
 
@@ -492,10 +596,8 @@ function renderDailyGroupTab() {
   if (grupoSel.size) data = data.filter(o => grupoSel.has(o.GRUPO));
 
   if (!diasSel.size) {
-    document.getElementById('chartDiaVolume') && charts['chartDiaVolume'] && charts['chartDiaVolume'].destroy();
-    document.getElementById('chartDiaValor') && charts['chartDiaValor'] && charts['chartDiaValor'].destroy();
-    charts['chartDiaVolume'] = null;
-    charts['chartDiaValor'] = null;
+    if (charts['chartDiaVolume']) { charts['chartDiaVolume'].destroy(); charts['chartDiaVolume'] = null; }
+    if (charts['chartDiaValor']) { charts['chartDiaValor'].destroy(); charts['chartDiaValor'] = null; }
     return;
   }
 
@@ -528,7 +630,7 @@ createMultiSelect('f-grupo', uniqueSorted(RAW_DATA.map(o=>o.GRUPO)), 'Todos');
 const faturadoDates = uniqueSorted(RAW_DATA.filter(o=>o.STATUS==='Faturado').map(o=>o.DATA));
 const defaultDias = faturadoDates.slice(-3);
 createMultiSelect('f2-grupo', uniqueSorted(RAW_DATA.filter(o=>o.STATUS==='Faturado').map(o=>o.GRUPO)), 'Todos');
-createMultiSelect('f2-dias', faturadoDates, 'Selecione dias', defaultDias);
+createDateCalendar('f2-dias', faturadoDates, 'Selecione dias', defaultDias);
 
 ['f-data-ini','f-data-fim'].forEach(id => document.getElementById(id).addEventListener('change', applyFilters));
 document.getElementById('f-search').addEventListener('input', applyFilters);
